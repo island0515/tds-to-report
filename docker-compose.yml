@@ -1,0 +1,70 @@
+services:
+  tds-to-report:
+    image: ${APP_IMAGE:?Set APP_IMAGE in .env, for example ghcr.io/your-name/tds-to-report:latest}
+    container_name: tds-to-report
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8101}:8000"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-80}"
+      MAX_TDS_FILES: "${MAX_TDS_FILES:-10}"
+      FILE_TTL_HOURS: "${FILE_TTL_HOURS:-24}"
+      STANDARDS_DIR: /app/data/standards
+      BLANK_TEMPLATE_DIR: /app/blank-templates
+      BLANK_TEMPLATE_FILE: "${BLANK_TEMPLATE_FILE:-}"
+      DOC_CONVERTER_URL: http://libreoffice-converter:8080/convert
+      DOC_CONVERTER_HEALTH_URL: http://libreoffice-converter:8080/health
+      DOC_CONVERTER_TOKEN: ${DOC_CONVERTER_TOKEN:?Set DOC_CONVERTER_TOKEN in .env}
+      DOC_CONVERSION_TIMEOUT_SECONDS: "${DOC_CONVERSION_TIMEOUT_SECONDS:-150}"
+    volumes:
+      - ./data/uploads:/app/data/uploads
+      - ./data/output:/app/data/output
+      - ./data/temp:/app/data/temp
+      - ./data/logs:/app/data/logs
+      - ./blank-templates:/app/blank-templates:ro
+      - ./standards:/app/data/standards:ro
+    depends_on:
+      libreoffice-converter:
+        condition: service_healthy
+    networks:
+      - tds-internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 20s
+
+  libreoffice-converter:
+    image: ${LIBREOFFICE_IMAGE:-linuxserver/libreoffice:latest}
+    container_name: libreoffice-converter
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/python3", "/converter/converter_api.py"]
+    environment:
+      CONVERTER_HOST: 0.0.0.0
+      CONVERTER_PORT: "8080"
+      CONVERTER_TOKEN: ${DOC_CONVERTER_TOKEN:?Set DOC_CONVERTER_TOKEN in .env}
+      CONVERSION_TIMEOUT_SECONDS: "${CONVERTER_TIMEOUT_SECONDS:-120}"
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-80}"
+      HOME: /tmp/lo-home
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./converter/converter_api.py:/converter/converter_api.py:ro
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    shm_size: "1gb"
+    expose:
+      - "8080"
+    networks:
+      - tds-internal
+    healthcheck:
+      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+
+networks:
+  tds-internal:
+    driver: bridge

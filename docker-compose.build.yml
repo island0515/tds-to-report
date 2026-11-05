@@ -1,0 +1,9 @@
+services:
+  tds-to-report:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tds-to-report:local
+    volumes:
+      - ./app.py:/app/app.py:ro
+      - ./public:/app/public:ro

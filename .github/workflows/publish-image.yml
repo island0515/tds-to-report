@@ -1,0 +1,71 @@
+name: Build and publish Docker image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+
+  pull_request:
+    branches:
+ *    - main
+
+  workflow_dispatch:
+
+*ermissions:
+  contents: read
+  pac*ages: write
+
+env:
+  REGISTRY: ghcr*io
+  IMAGE_NAME: ${{ github.reposi*ory }}
+
+jobs:
+  build:
+    runs-on* ubuntu-latest
+
+    steps:
+      -*name: Checkout
+        uses: actio*s/checkout@v4
+
+      - name: Set u* Docker Buildx
+        uses: docke*/setup-buildx-action@v3
+
+      - n*me: Log in to GHCR
+        if: git*ub.event_name != 'pull_request'
+  *     uses: docker/login-action@v3
+*       with:
+          registry: $*{ env.REGISTRY }}
+          userna*e: ${{ github.actor }}
+          p*ssword: ${{ secrets.GITHUB_TOKEN }*
+
+      - name: Docker metadata
+  *     id: meta
+        uses: docker*metadata-action@v5
+        with:
+ *        images: ${{ env.REGISTRY }*/${{ env.IMAGE_NAME }}
+
+          *ags: |
+            type=raw,value=*atest,enable={{is_default_branch}}*            type=ref,event=branch
+*           type=ref,event=pr
+     *      type=semver,pattern={{versio*}}
+            type=semver,pattern*{{major}}.{{minor}}
+            ty*e=sha
+
+          labels: |
+       *    org.opencontainers.image.title*TDS to Report
+            org.open*ontainers.image.description=Import*multiple TDS tables into Word repo*ts
+            org.opencontainers.*mage.source=https://github.com/${{ github.repository }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
